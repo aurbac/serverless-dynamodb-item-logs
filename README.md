@@ -11,9 +11,13 @@ Work inside your AWS Cloud9 or local environment.
 ``` bash
 aws configure
 ```
+
     * AWS Access Key ID: **(Use default)**
+
     * AWS Secret Access Key: **(Use default)**
+
     * Default region name [us-east-1]: **us-east-1**
+    
     * Default output format [json]: **json**
 
 * In your local environment [configure the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html#cli-quick-configuration).
