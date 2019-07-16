@@ -1,0 +1,287 @@
+# Welcome to Serverless!
+#
+# This file is the main config file for your service.
+# It's very minimal at this point and uses default values.
+# You can always add more config options for more control.
+# We've included some commented out config examples here.
+# Just uncomment any of them to get that config option.
+#
+# For full config options, check the docs:
+#    docs.serverless.com
+#
+# Happy Coding!
+
+service: serverless-dynamodb-item-logs # NOTE: update this with your service name
+#app: your-app-name
+#tenant: your-tenant-name
+
+custom:
+  dataBaseName: serverless_dynamodb_item_logs_${self:provider.stage}
+  tableName: serverless_dynamodb_item_logs_${self:provider.stage}_answers
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out our docs for more details
+# frameworkVersion: "=X.X.X"
+
+provider:
+  name: aws
+  runtime: python2.7
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:DescribeStream
+        - dynamodb:GetRecords
+        - dynamodb:GetShardIterator
+        - dynamodb:ListStreams
+        - firehose:Put*
+      Resource: "*"
+
+functions:
+  sendLogsToFirehose:
+    handler: handler.sendLogsToFirehose
+    timeout: 30
+    environment:
+      streamName: !Ref FirehoseDeliverystream
+    events:
+      - stream:
+          type: dynamodb
+          batchSize: 100
+          startingPosition: LATEST
+          arn:
+            Fn::GetAtt:
+              - MyDynamoDBTable
+              - StreamArn
+
+# you can add CloudFormation resource templates here
+resources:
+  Resources:
+
+    S3Bucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+
+    GlueDatabase:
+      Type: AWS::Glue::Database
+      Properties: 
+        CatalogId: !Ref AWS::AccountId
+        DatabaseInput:
+          Name: ${self:custom.dataBaseName}
+
+    GlueTable:
+      Type: AWS::Glue::Table
+      Properties:
+        CatalogId: !Ref AWS::AccountId
+        DatabaseName: !Ref GlueDatabase
+        TableInput:
+          Name: ${self:custom.tableName}
+          Owner: owner
+          Retention: 0
+          StorageDescriptor:
+            Columns:
+            - Name: db_event_name
+              Type: string
+            - Name: db_date_time
+              Type: int
+            - Name: custom_key
+              Type: string
+            - Name: user_id
+              Type: int
+            - Name: question_id
+              Type: int
+            - Name: question_type
+              Type: int
+            - Name: form_id
+              Type: int
+            - Name: answer_value
+              Type: string
+            - Name: answer_values
+              Type: string
+            - Name: answer_value_description
+              Type: string
+            - Name: created_at
+              Type: int
+            InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+            OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+            Location: 
+              !Join
+                - ''
+                - - 's3://'
+                  - !Ref S3Bucket
+                  - '/'
+                  - ${self:custom.tableName}
+            Compressed: false
+            NumberOfBuckets: -1
+            SerdeInfo:
+              SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+              Parameters:
+                serialization.format: '1'
+            BucketColumns: []
+            SortColumns: []
+            StoredAsSubDirectories: false
+          PartitionKeys:
+          - Name: year
+            Type: string
+          - Name: month
+            Type: string
+          - Name: day
+            Type: string
+          - Name: hour
+            Type: string
+          TableType: EXTERNAL_TABLE
+
+    FirehoseRole:
+      Type: "AWS::IAM::Role"
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            -
+              Effect: "Allow"
+              Principal:
+                Service:
+                  - "firehose.amazonaws.com" 
+              Action: 
+                - "sts:AssumeRole"
+        Path: "/"
+        Policies:
+          -
+            PolicyName: "root"
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                -
+                  Effect: "Allow"
+                  Action: 
+                    - "glue:GetTableVersions"
+                  Resource: "*"
+                -
+                  Effect: "Allow"
+                  Action: 
+                    - "s3:AbortMultipartUpload"
+                    - "s3:GetBucketLocation"
+                    - "s3:GetObject"
+                    - "s3:ListBucket"
+                    - "s3:ListBucketMultipartUploads"
+                    - "s3:PutObject"
+                  Resource:
+                    - "arn:aws:s3:::%FIREHOSE_BUCKET_NAME%"
+                    - "arn:aws:s3:::%FIREHOSE_BUCKET_NAME%/*"
+                    - 
+                      Fn::GetAtt:
+                        - S3Bucket
+                        - Arn
+                    -
+                      Fn::Join:
+                        - ""
+                        - - 
+                            Fn::GetAtt:
+                              - S3Bucket
+                              - Arn
+                          - "/*"
+                -
+                  Effect: "Allow"
+                  Action: 
+                    - "lambda:InvokeFunction"
+                    - "lambda:GetFunctionConfiguration"
+                  Resource: "arn:aws:lambda:us-east-1:716736363845:function:%FIREHOSE_DEFAULT_FUNCTION%:%FIREHOSE_DEFAULT_VERSION%"
+                -
+                  Effect: "Allow"
+                  Action: 
+                    - "logs:PutLogEvents"
+                  Resource: "arn:aws:logs:us-east-1:716736363845:log-group:/aws/kinesisfirehose/mystream:log-stream:*"
+                -
+                  Effect: "Allow"
+                  Action: 
+                    - "kinesis:DescribeStream"
+                    - "kinesis:GetShardIterator"
+                    - "kinesis:GetRecords"
+                  Resource: "arn:aws:kinesis:us-east-1:716736363845:stream/%FIREHOSE_STREAM_NAME%"
+                -
+                  Effect: "Allow"
+                  Action: 
+                    - "kms:Decrypt"
+                  Resource: "arn:aws:kms:us-east-1:716736363845:key/%SSE_KEY_ID%"
+                  Condition:
+                    StringEquals:
+                      kms:ViaService: "kinesis.%REGION_NAME%.amazonaws.com"
+                    StringLike:
+                      kms:EncryptionContext:aws:kinesis:arn: "arn:aws:kinesis:%REGION_NAME%:716736363845:stream/%FIREHOSE_STREAM_NAME%"
+
+
+    FirehoseDeliverystream:
+      Type: AWS::KinesisFirehose::DeliveryStream
+      Properties:
+        DeliveryStreamType: DirectPut
+        ExtendedS3DestinationConfiguration:
+          BucketARN: 
+            Fn::GetAtt:
+              - S3Bucket
+              - Arn
+          BufferingHints:
+            IntervalInSeconds: '60'
+            SizeInMBs: '128'
+          CompressionFormat: UNCOMPRESSED
+          Prefix: !Join 
+            - ''
+            - - !Ref GlueTable
+              -  '/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/'
+          ErrorOutputPrefix: !Join 
+            - ''
+            - - !Ref GlueTable
+              -  'error/!{firehose:error-output-type}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/'
+          RoleARN: !GetAtt FirehoseRole.Arn
+          S3BackupMode: Disabled
+          EncryptionConfiguration:
+            NoEncryptionConfig: NoEncryption
+          DataFormatConversionConfiguration:
+            SchemaConfiguration:
+              CatalogId: !Ref AWS::AccountId
+              RoleARN: !GetAtt FirehoseRole.Arn
+              DatabaseName: !Ref GlueDatabase
+              TableName: !Ref GlueTable
+              Region: !Ref AWS::Region
+              VersionId: LATEST
+            InputFormatConfiguration:
+              Deserializer:
+                OpenXJsonSerDe: {}
+            OutputFormatConfiguration:
+              Serializer:
+                ParquetSerDe: {}
+            Enabled: True
+
+    MyDynamoDBTable:
+      Type: "AWS::DynamoDB::Table"
+      DeletionPolicy: Retain
+      Properties:
+        StreamSpecification: 
+          StreamViewType: NEW_AND_OLD_IMAGES
+        AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: N
+        - AttributeName: question_id
+          AttributeType: N
+        KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: question_id
+          KeyType: RANGE
+        TableName: ${self:custom.tableName}
+        BillingMode: PAY_PER_REQUEST
+
+
+
+#    NewResource:
+#      Type: AWS::S3::Bucket
+#      Properties:
+#        BucketName: my-new-bucket
+  Outputs:
+    DynamoDBName:
+      Description: "DynamoDB Name"
+      Value: !Ref MyDynamoDBTable
+    DynamoDBStreamArn:
+      Description: "DynamoDB Stream Arn"
+      Value:
+        Fn::GetAtt:
+          - MyDynamoDBTable
+          - StreamArn
+      
