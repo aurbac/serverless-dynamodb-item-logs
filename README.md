@@ -6,11 +6,18 @@ Work inside your AWS Cloud9 or local environment to deploy the following Serverl
 
 ## Configure your environment
 
-- In AWS Cloud9 configure the AWS CLI using the local credentials, and set the region name to **`us-east-1`** and the output format to **`json`**. 
+- In AWS Cloud9 configure the AWS CLI using the default credentials, and set the region name to **`us-east-1`** and the output format to **`json`**. 
 
 ``` bash
 aws configure
 ```
+
+- First item
+- Second item
+- Third item
+    - Indented item
+    - Indented item
+- Fourth item
 
     - AWS Access Key ID: **(Use default)**
     - AWS Secret Access Key: **(Use default)**
