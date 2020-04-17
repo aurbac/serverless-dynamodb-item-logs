@@ -6,24 +6,10 @@ Work inside your AWS Cloud9 or local environment to deploy the following Serverl
 
 ## Configure your environment
 
-``` bash
-aws configure
-```
-
-- In AWS Cloud9 configure the AWS CLI as follows. 
-    - AWS Access Key ID: **(Use default)**
-    - AWS Secret Access Key: **(Use default)**
-    - Default region name [us-east-1]: **us-east-1**
-    - Default output format [json]: **json**
+- Cloud9: Use the default configuration.
 - In your local environment [configure the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html#cli-quick-configuration) with your own IAM credentials.
 
 ## Install dependencies
-
-Update Node.js to the minimal version of 8.
-
-``` bash
-nvm i v8
-```
 
 Install Serverless CLI tool https://serverless.com/framework/docs/providers/aws/guide/installation/
 
